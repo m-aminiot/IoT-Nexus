@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mosquitto Broker Pro UI</title>
+    <style>
+        
+        :root {
+            --transition-smooth: all 0.3s ease;
+            --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        [data-theme="dark"] {
+            --bg-body: radial-gradient(circle at 50% 50%, #171b26 0%, #080a10 100%);
+            --bg-panel: rgba(22, 27, 38, 0.75);
+            --border-panel: rgba(255, 255, 255, 0.05);
+            --bg-field: rgba(255, 255, 255, 0.02);
+            --border-field: rgba(255, 255, 255, 0.06);
+            --bg-input: rgba(0, 0, 0, 0.25);
+            --text-main: #f1f5f9;
+            --text-muted: #64748b;
+            --accent: #38bdf8; 
+            --glass-blur: blur(25px);
+            --panel-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8);
+            --success: #10b981;
+            --error: #ef4444;
+        }
+
+        [data-theme="light"] {
+            --bg-body: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            --bg-panel: rgba(255, 255, 255, 0.75);
+            --border-panel: rgba(0, 0, 0, 0.04);
+            --bg-field: #ffffff;
+            --border-field: rgba(0, 0, 0, 0.05);
+            --bg-input: #f1f5f9;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --accent: #0284c7; 
+            --glass-blur: blur(15px);
+            --panel-shadow: 0 20px 40px rgba(15, 23, 42, 0.06);
+            --success: #059669;
+            --error: #dc2626;
+        }
+
+        [data-theme="gray"] {
+            --bg-body: #111827;
+            --bg-panel: rgba(31, 41, 55, 0.8);
+            --border-panel: rgba(75, 85, 99, 0.25);
+            --bg-field: rgba(55, 65, 81, 0.4);
+            --border-field: rgba(75, 85, 99, 0.2);
+            --bg-input: #0f172a;
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            --accent: #a78bfa; 
+            --glass-blur: blur(20px);
+            --panel-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            --success: #34d399;
+            --error: #f87171;
+        }
+
+        [data-theme="aqua"] {
+            --bg-body: linear-gradient(135deg, #011627 0%, #000d1a 100%);
+            --bg-panel: rgba(2, 32, 54, 0.75);
+            --border-panel: rgba(0, 255, 255, 0.08);
+            --bg-field: rgba(0, 255, 255, 0.01);
+            --border-field: rgba(0, 255, 255, 0.08);
+            --bg-input: rgba(0, 0, 0, 0.35);
+            --text-main: #f0f7ff;
+            --text-muted: #708099;
+            --accent: #00ffff; 
+            --glass-blur: blur(20px);
+            --panel-shadow: 0 0 40px rgba(0, 255, 255, 0.12);
+            --success: #00ff88;
+            --error: #ff3366;
+        }
+
+        [data-theme="cyber"] {
+            --bg-body: radial-gradient(circle at 50% 50%, #1a0b2e 0%, #08020f 100%);
+            --bg-panel: rgba(29, 14, 51, 0.8);
+            --border-panel: rgba(255, 0, 127, 0.2);
+            --bg-field: rgba(255, 0, 127, 0.02);
+            --border-field: rgba(255, 0, 127, 0.15);
+            --bg-input: #0d0418;
+            --text-main: #f5f3f7;
+            --text-muted: #9283a6;
+            --accent: #ff007f; 
+            --glass-blur: blur(20px);
+            --panel-shadow: 0 0 40px rgba(255, 0, 127, 0.15);
+            --success: #00ffcc;
+            --error: #ff3333;
+        }
+
+        [data-theme="emerald"] {
+            --bg-body: radial-gradient(circle at 50% 50%, #061411 0%, #010504 100%);
+            --bg-panel: rgba(10, 26, 23, 0.85);
+            --border-panel: rgba(16, 185, 129, 0.12);
+            --bg-field: rgba(16, 185, 129, 0.01);
+            --border-field: rgba(16, 185, 129, 0.12);
+            --bg-input: #030a08;
+            --text-main: #ecfdf5;
+            --text-muted: #6b847e;
+            --accent: #10b981; 
+            --glass-blur: blur(25px);
+            --panel-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            --success: #05f394;
+            --error: #f43f5e;
+        }
+
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-family);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background: var(--bg-body);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            transition: background 0.4s ease;
+        }
+
+        
+        .theme-switcher-container {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            display: flex;
+            gap: 10px;
+            background: var(--bg-panel);
+            padding: 8px;
+            border-radius: 40px;
+            border: 1px solid var(--border-panel);
+            backdrop-filter: var(--glass-blur);
+            z-index: 100;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2);
+        }
+
+        .theme-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+            position: relative;
+        }
+
+        .theme-btn:hover {
+            transform: scale(1.15);
+        }
+
+        .theme-btn.active {
+            border-color: var(--accent);
+            transform: scale(1.1);
+        }
+
+        
+        .container {
+            background-color: var(--bg-panel);
+            width: 100%;
+            max-width: 550px;
+            padding: 40px 35px;
+            border-radius: 28px;
+            box-shadow: var(--panel-shadow);
+            border: 1px solid var(--border-panel);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            transition: var(--transition-smooth);
+            position: relative;
+        }
+
+        h2 {
+            margin-bottom: 30px;
+            font-size: 24px;
+            text-align: center;
+            color: var(--text-main);
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        h2::after {
+            content: '';
+            display: block;
+            width: 30px; height: 4px;
+            background: var(--accent);
+            border-radius: 10px;
+            margin: 10px auto 0;
+            transition: var(--transition-smooth);
+        }
+
+        
+        .scroll-area {
+            max-height: 420px;
+            overflow-y: auto;
+            padding-right: 8px;
+            margin-bottom: 25px;
+        }
+
+        .scroll-area::-webkit-scrollbar { width: 5px; }
+        .scroll-area::-webkit-scrollbar-track { background: transparent; }
+        .scroll-area::-webkit-scrollbar-thumb { background: var(--border-panel); border-radius: 10px; }
+        .scroll-area:hover::-webkit-scrollbar-thumb { background: var(--text-muted); }
+
+        .form-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            background-color: var(--bg-field);
+            padding: 16px 20px;
+            border-radius: 16px;
+            margin-bottom: 12px;
+            border: 1px solid var(--border-field);
+            transition: var(--transition-smooth);
+        }
+
+        .form-group:hover {
+            border-color: var(--accent);
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        label {
+            font-size: 14px;
+            color: var(--text-main);
+            font-weight: 600;
+            word-break: break-all;
+            flex: 1;
+            text-transform: capitalize;
+            opacity: 0.9;
+        }
+
+        
+        input[type="text"], input[type="number"] {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-field);
+            color: var(--text-main);
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: var(--transition-smooth);
+        }
+
+        input[type="text"]:focus, input[type="number"]:focus {
+            border-color: var(--accent);
+            background-color: var(--bg-panel);
+        }
+
+        
+        input[type="text"] {
+            width: 240px; 
+            text-align: left;
+            font-weight: 500;
+            direction: ltr;
+        }
+
+        
+        input[type="number"] {
+            width: 100px;
+            text-align: center;
+            font-weight: 700;
+        }
+
+        
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px !important;
+            height: 26px;
+            flex: 0 0 48px; 
+            margin: 0;
+        }
+
+        .switch input { 
+            opacity: 0; 
+            width: 0; 
+            height: 0; 
+            position: absolute;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--bg-input);
+            transition: .3s ease-in-out;
+            border-radius: 34px;
+            border: 1px solid var(--border-field);
+        }
+
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px; 
+            width: 18px;
+            left: 4px; 
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: var(--text-muted);
+            transition: .3s ease-in-out;
+            border-radius: 50%;
+        }
+
+        
+        input:checked + .slider {
+            background-color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        input:checked + .slider:before {
+            transform: translate(22px, -50%);
+            background-color: #ffffff;
+        }
+
+        
+        .btn-submit {
+            background-color: var(--accent);
+            color: #ffffff;
+            border: none;
+            padding: 15px;
+            width: 100%;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+            margin-top: 5px;
+        }
+
+        .btn-submit:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .message {
+            
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 14px;
+            display: none;
+            font-weight: 700;
+        }
+
+        .success {
+            background-color: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .error {
+            background-color: rgba(239, 68, 68, 0.15);
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+    </style>
+
+
+<style>
+@media (max-width:700px){
+body{padding:15px;align-items:flex-start;min-height:100dvh}
+.container{margin-top:80px;padding:25px 20px;border-radius:20px}
+.theme-switcher-container{top:15px;right:50%;transform:translateX(50%);flex-wrap:wrap;justify-content:center;width:calc(100% - 30px);max-width:360px}
+.form-group{flex-direction:column;align-items:stretch;gap:12px}
+input[type="text"],input[type="number"]{width:100%!important;max-width:none!important}
+.switch{align-self:flex-end}
+.scroll-area{overflow:visible;max-height:none}
+}
+</style>
+
+</head>
+<body>
+
+    <div class="theme-switcher-container">
+        <div class="theme-btn" style="background: #0b0e14;" data-theme="dark"></div>
+        <div class="theme-btn" style="background: #ffffff; border: 1px solid #ccc;" data-theme="light"></div>
+        <div class="theme-btn" style="background: #1f2937;" data-theme="gray"></div>
+        <div class="theme-btn" style="background: #011627; box-shadow: inset 0 0 5px cyan;" data-theme="aqua"></div>
+        <div class="theme-btn" style="background: #12072b; box-shadow: inset 0 0 5px #ff007f;" data-theme="cyber"></div>
+        <div class="theme-btn" style="background: #051411; box-shadow: inset 0 0 5px #10b981;" data-theme="emerald"></div>
+    </div>
+
+    <div class="container">
+        <h2>Broker Pro Settings</h2>
+        
+        <form id="configForm">
+            <div class="scroll-area" id="dynamicFields"></div>
+            <button type="submit" class="btn-submit">Save Configuration</button>
+        </form>
+
+        <div id="msgBox" class="message"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const themeBtns = document.querySelectorAll('.theme-btn');
+            const htmlNode = document.documentElement;
+
+            const savedTheme = localStorage.getItem('mosquitto_theme') || 'dark';
+            htmlNode.setAttribute('data-theme', savedTheme);
+
+            const targetBtn = document.querySelector(`.theme-btn[data-theme="${savedTheme}"]`);
+            if(targetBtn) {
+                targetBtn.classList.add('active');
+            }
+
+            themeBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    
+                    const theme = btn.getAttribute('data-theme');
+                    htmlNode.setAttribute('data-theme', theme);
+                    localStorage.setItem('mosquitto_theme', theme);
+                });
+            });
+        });
+
+        const API_URL = '/api/config';
+        const fieldsContainer = document.getElementById('dynamicFields');
+        const configForm = document.getElementById('configForm');
+        const msgBox = document.getElementById('msgBox');
+
+        function showMessage(text, isSuccess) {
+            msgBox.innerText = text;
+            msgBox.className = 'message ' + (isSuccess ? 'success' : 'error');
+            msgBox.style.display = 'block';
+            setTimeout(() => { msgBox.style.display = 'none'; }, 3000);
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch(API_URL);
+                const configData = await response.json();
+                
+                fieldsContainer.innerHTML = '';
+
+                for (const [key, value] of Object.entries(configData)) {
+                    const formGroup = document.createElement('div');
+                    formGroup.className = 'form-group';
+                    
+                    const displayLabel = key.replace(/_/g, ' ');
+
+                    if (typeof value === 'boolean') {
+                        formGroup.innerHTML = `
+                            <label for="${key}">${displayLabel}</label>
+                            <label class="switch">
+                                <input type="checkbox" id="${key}" data-type="boolean" ${value ? 'checked' : ''}>
+                                <span class="slider"></span>
+                            </label>
+                        `;
+                    } else {
+                        const inputType = typeof value === 'number' ? 'number' : 'text';
+                        formGroup.innerHTML = `
+                            <label for="${key}">${displayLabel}</label>
+                            <input type="${inputType}" id="${key}" data-type="${typeof value}" value="${value}">
+                        `;
+                    }
+                    fieldsContainer.appendChild(formGroup);
+                }
+            } catch (error) {
+                showMessage('Failed to load settings from server.', false);
+            }
+        }
+
+        configForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const updatedData = {};
+            const inputs = fieldsContainer.querySelectorAll('input');
+
+            inputs.forEach(input => {
+                const key = input.id;
+                const dataType = input.getAttribute('data-type');
+                
+                if (dataType === 'boolean') {
+                    updatedData[key] = input.checked;
+                } else if (dataType === 'number') {
+                    updatedData[key] = Number(input.value);
+                } else {
+                    updatedData[key] = input.value;
+                }
+            });
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updatedData)
+                });
+
+                const result = await response.json();
+                
+                if (response.ok && result.status === 'ok') {
+                    showMessage('Configuration saved successfully!', true);
+                } else {
+                    showMessage(result.message || 'Server returned an error.', false);
+                }
+            } catch (error) {
+                showMessage('Failed to save configuration.', false);
+            }
+        });
+
+        window.addEventListener('DOMContentLoaded', loadConfig);
+    </script>
+</body>
+</html>

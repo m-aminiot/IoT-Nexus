@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Control Center</title>
+    <style>
+        :root {
+            --bg: #070b14;
+            --panel: rgba(17, 24, 39, 0.72);
+            --border: rgba(148, 163, 184, 0.16);
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --cyan: #38bdf8;
+            --purple: #a78bfa;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Inter, "Segoe UI", sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 15% 20%, rgba(56, 189, 248, .18), transparent 32%),
+                radial-gradient(circle at 85% 80%, rgba(167, 139, 250, .18), transparent 32%),
+                var(--bg);
+        }
+
+        .shell {
+            width: min(920px, 100%);
+            padding: 52px;
+            border: 1px solid var(--border);
+            border-radius: 32px;
+            background: var(--panel);
+            backdrop-filter: blur(24px);
+            box-shadow: 0 30px 80px rgba(0, 0, 0, .42);
+            animation: appear .55s ease both;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            color: var(--cyan);
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #34d399;
+            box-shadow: 0 0 16px #34d399;
+        }
+
+        h1 {
+            max-width: 680px;
+            margin-top: 18px;
+            font-size: clamp(36px, 6vw, 68px);
+            line-height: .98;
+            letter-spacing: -3px;
+        }
+
+        h1 span {
+            color: var(--cyan);
+        }
+
+        .subtitle {
+            max-width: 610px;
+            margin-top: 22px;
+            color: var(--muted);
+            font-size: 17px;
+            line-height: 1.7;
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+            margin-top: 38px;
+        }
+
+        .action {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            min-height: 116px;
+            padding: 22px 24px;
+            color: var(--text);
+            text-decoration: none;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: rgba(255, 255, 255, .045);
+            transition: transform .25s ease, border-color .25s ease, background .25s ease;
+        }
+
+        .action:hover {
+            transform: translateY(-5px);
+            border-color: var(--cyan);
+            background: rgba(56, 189, 248, .11);
+        }
+
+        .action.devices:hover {
+            border-color: var(--purple);
+            background: rgba(167, 139, 250, .11);
+        }
+
+        .icon {
+            display: grid;
+            place-items: center;
+            width: 48px;
+            height: 48px;
+            flex: 0 0 48px;
+            border-radius: 14px;
+            color: var(--cyan);
+            background: rgba(56, 189, 248, .13);
+            font-size: 23px;
+        }
+
+        .devices .icon {
+            color: var(--purple);
+            background: rgba(167, 139, 250, .13);
+        }
+
+        .copy {
+            flex: 1;
+        }
+
+        .copy strong {
+            display: block;
+            font-size: 18px;
+        }
+
+        .copy small {
+            display: block;
+            margin-top: 7px;
+            color: var(--muted);
+            line-height: 1.4;
+        }
+
+        .arrow {
+            color: var(--muted);
+            font-size: 24px;
+            transition: transform .25s ease;
+        }
+
+        .action:hover .arrow {
+            transform: translateX(4px);
+            color: var(--text);
+        }
+
+        @keyframes appear {
+            from { opacity: 0; transform: translateY(18px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 650px) {
+            .shell { padding: 34px 22px; border-radius: 24px; }
+            h1 { letter-spacing: -1.5px; }
+            .actions { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <div class="eyebrow"><span class="dot"></span> MQTT Control Center</div>
+        <h1>Hello <span>{{ username }}</span> 👋</h1>
+        <p class="subtitle">
+            Welcome to your project control center. From here, you can manage your
+            broker settings or explore connected devices.
+        </p>
+
+        <section class="actions">
+            <a class="action" href="/mosquitto/panel">
+                <span class="icon">⚙</span>
+                <span class="copy">
+                    <strong>Broker Settings</strong>
+                    <small>Manage ports, TLS, WebSocket, and Mosquitto settings</small>
+                </span>
+                <span class="arrow">→</span>
+            </a>
+
+            <a class="action devices" href="/devices">
+                <span class="icon">⌁</span>
+                <span class="copy">
+                    <strong>Devices</strong>
+                    <small>View and manage devices connected to your broker</small>
+                </span>
+                <span class="arrow">→</span>
+            </a>
+        </section>
+    </main>
+</body>
+</html>

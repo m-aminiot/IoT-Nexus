@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign Up</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:"Segoe UI",sans-serif;
+}
+
+:root{
+    --bg:#eef2f7;
+    --card:#ffffff;
+    --text:#222;
+    --input:#f5f7fa;
+    --border:#d6dbe3;
+    --primary:#5865F2;
+    --primary-hover:#4752C4;
+}
+
+@media (prefers-color-scheme: dark){
+:root{
+    --bg:#0f172a;
+    --card:#1e293b;
+    --text:#f1f5f9;
+    --input:#334155;
+    --border:#475569;
+    --primary:#5865F2;
+    --primary-hover:#4752C4;
+}
+}
+
+body{
+    background:var(--bg);
+    color:var(--text);
+    height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+.card{
+    width:380px;
+    background:var(--card);
+    padding:35px;
+    border-radius:18px;
+    box-shadow:0 15px 40px rgba(0,0,0,.25);
+    animation:fade .5s;
+}
+
+@keyframes fade{
+    from{
+        opacity:0;
+        transform:translateY(15px);
+    }
+    to{
+        opacity:1;
+        transform:translateY(0);
+    }
+}
+
+h1{
+    text-align:center;
+    margin-bottom:10px;
+}
+
+.subtitle{
+    text-align:center;
+    color:#8b949e;
+    margin-bottom:25px;
+    font-size:14px;
+}
+
+input{
+    width:100%;
+    padding:14px;
+    margin-bottom:16px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:var(--input);
+    color:var(--text);
+    font-size:15px;
+    transition:.2s;
+}
+
+input:focus{
+    outline:none;
+    border-color:var(--primary);
+    box-shadow:0 0 8px rgba(88,101,242,.4);
+}
+
+button{
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:10px;
+    background:var(--primary);
+    color:white;
+    font-size:16px;
+    cursor:pointer;
+    transition:.25s;
+}
+
+button:hover{
+    background:var(--primary-hover);
+}
+
+button:disabled{
+    opacity:.7;
+    cursor:not-allowed;
+}
+
+/* استایل دکمه بازگشت به ورود */
+.btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+    margin-top: 12px;
+}
+
+.btn-secondary:hover {
+    background: var(--input);
+}
+
+#message{
+    text-align:center;
+    margin-top:18px;
+    min-height:22px;
+    font-size:15px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="card">
+
+    <h1>Create Account</h1>
+    <p class="subtitle">Create your new account</p>
+
+    <input
+        id="username"
+        type="text"
+        placeholder="Username"
+    >
+
+    <input
+        id="password"
+        type="password"
+        placeholder="Password"
+    >
+
+    <button id="btn" onclick="signup()">
+        Sign Up
+    </button>
+
+    <p id="message"></p>
+
+    <button class="btn-secondary" onclick="goToLogin()">
+        Back to Login
+    </button>
+
+</div>
+
+<script>
+
+function goToLogin() {
+    window.location.href = "/login";
+}
+
+async function signup(){
+
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+
+    const message = document.getElementById("message");
+    const btn = document.getElementById("btn");
+
+    message.innerText = "";
+
+    if(username === "" || password === ""){
+
+        message.style.color = "#ef4444";
+        message.innerText = "Please fill all fields.";
+        return;
+
+    }
+
+    btn.disabled = true;
+    btn.innerText = "Creating...";
+
+    try{
+
+        const response = await fetch("/info_signup",{
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json"
+            },
+            body:JSON.stringify({
+                username:username,
+                password:password
+            })
+        });
+
+        const result = await response.json();
+
+        if(result.message === "Signup successful"){
+
+            message.style.color = "#22c55e";
+            message.innerText = result.message;
+
+            setTimeout(function(){
+                window.location.href = "/login";
+            },1000);
+
+        }else{
+
+            message.style.color = "#ef4444";
+            message.innerText = result.message;
+
+        }
+
+    }catch(error){
+
+        message.style.color = "#ef4444";
+        message.innerText = "Connection error.";
+
+    }
+
+    btn.disabled = false;
+    btn.innerText = "Sign Up";
+
+}
+
+</script>
+
+</body>
+</html>

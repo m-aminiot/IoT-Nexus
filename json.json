@@ -1,0 +1,14 @@
+{
+    "active_TLS": false,
+    "active_websocket": false,
+    "allow_anonymous": false,
+    "cafile": "/dewd",
+    "certfile": "/etc/mosquitto/server.crt",
+    "keyfile": "/etc/mosquitto/server.key",
+    "listen_ip(wireguard)": "10.0.0.1",
+    "need_cert(for server)": false,
+    "password_file": "/parsa",
+    "port(websocket)": 1,
+    "port_NonTls(mqtt)": 90,
+    "port_Tls(mqtt)": 8883
+}

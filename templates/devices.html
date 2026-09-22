@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connected Devices · MQTT Control Center</title>
+    <style>
+        :root {
+            --bg: #070b14;
+            --panel: rgba(17, 24, 39, .76);
+            --panel-hover: rgba(30, 41, 59, .82);
+            --border: rgba(148, 163, 184, .16);
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --cyan: #38bdf8;
+            --green: #34d399;
+            --red: #fb7185;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            padding: 32px 24px;
+            color: var(--text);
+            font-family: Inter, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at 12% 8%, rgba(56, 189, 248, .17), transparent 28%),
+                radial-gradient(circle at 88% 92%, rgba(52, 211, 153, .12), transparent 30%),
+                var(--bg);
+        }
+
+        .page { width: min(1100px, 100%); margin: 0 auto; }
+
+        .topbar, .heading-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+
+        .back-link {
+            color: var(--muted);
+            font-size: 14px;
+            text-decoration: none;
+            transition: color .2s ease;
+        }
+
+        .back-link:hover { color: var(--cyan); }
+
+        .live-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            color: #bbf7d0;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            border: 1px solid rgba(52, 211, 153, .25);
+            border-radius: 999px;
+            background: rgba(52, 211, 153, .08);
+        }
+
+        .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
+
+        header { margin: 68px 0 34px; }
+        .eyebrow { color: var(--cyan); font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+        h1 { margin: 12px 0 10px; font-size: clamp(34px, 6vw, 60px); letter-spacing: -2.5px; line-height: 1; }
+        .subtitle { max-width: 600px; margin: 0; color: var(--muted); line-height: 1.65; }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 34px;
+        }
+
+        .stat {
+            padding: 20px;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            background: var(--panel);
+            backdrop-filter: blur(18px);
+        }
+
+        .stat-label { color: var(--muted); font-size: 13px; }
+        .stat-value { display: block; margin-top: 7px; font-size: 28px; font-weight: 800; }
+        .online-value { color: var(--green); }
+        .offline-value { color: var(--red); }
+
+        .heading-row { margin-bottom: 16px; }
+        h2 { margin: 0; font-size: 20px; }
+
+        .refresh-button {
+            padding: 10px 14px;
+            color: var(--text);
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, .05);
+            transition: background .2s ease, border-color .2s ease;
+        }
+
+        .refresh-button:hover { border-color: var(--cyan); background: rgba(56, 189, 248, .12); }
+
+        .devices-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 14px; }
+
+        .device-card {
+            position: relative;
+            min-height: 144px;
+            padding: 20px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            background: var(--panel);
+            transition: transform .2s ease, background .2s ease, border-color .2s ease;
+        }
+
+        .device-card:hover { transform: translateY(-3px); background: var(--panel-hover); }
+        .device-card.online { border-color: rgba(52, 211, 153, .3); }
+        .device-card.offline { border-color: rgba(251, 113, 133, .25); }
+
+        .device-icon {
+            display: grid;
+            place-items: center;
+            width: 39px;
+            height: 39px;
+            border-radius: 12px;
+            color: var(--cyan);
+            font-size: 20px;
+            background: rgba(56, 189, 248, .12);
+        }
+
+        .device-name { display: block; margin: 18px 0 8px; overflow: hidden; font-size: 16px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+        .status { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 650; text-transform: capitalize; }
+        .status-dot { width: 9px; height: 9px; border-radius: 50%; }
+        .status.online { color: var(--green); }
+        .status.online .status-dot { background: var(--green); box-shadow: 0 0 13px var(--green); }
+        .status.offline { color: var(--red); }
+        .status.offline .status-dot { background: var(--red); box-shadow: 0 0 13px var(--red); }
+        .last-online { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+        .delete-device {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            padding: 7px 9px;
+            color: var(--red);
+            font: inherit;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid rgba(251, 113, 133, .28);
+            border-radius: 8px;
+            background: rgba(251, 113, 133, .08);
+        }
+        .delete-device:hover { background: rgba(251, 113, 133, .18); }
+        .delete-device:disabled { cursor: wait; opacity: .6; }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            padding: 58px 20px;
+            color: var(--muted);
+            text-align: center;
+            border: 1px dashed var(--border);
+            border-radius: 18px;
+            background: rgba(15, 23, 42, .4);
+        }
+
+        .empty-state strong { display: block; margin-bottom: 8px; color: var(--text); font-size: 16px; }
+        .updated { min-height: 18px; margin: 22px 0 0; color: var(--muted); font-size: 12px; text-align: right; }
+
+        @media (max-width: 620px) {
+            body { padding: 22px 16px; }
+            header { margin-top: 48px; }
+            .summary { grid-template-columns: 1fr; }
+            h1 { letter-spacing: -1.5px; }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <div class="topbar">
+            <a class="back-link" href="/mainpage">← Back to dashboard</a>
+            <span class="live-pill"><span class="pulse"></span> Live status</span>
+        </div>
+
+        <header>
+            <div class="eyebrow">MQTT Control Center</div>
+            <h1>Your devices</h1>
+            <p class="subtitle">Monitor the current connection status of MQTT clients in one place.</p>
+        </header>
+
+        <section class="summary" aria-label="Device summary">
+            <article class="stat"><span class="stat-label">Total devices</span><strong class="stat-value" id="totalCount">0</strong></article>
+            <article class="stat"><span class="stat-label">Online now</span><strong class="stat-value online-value" id="onlineCount">0</strong></article>
+            <article class="stat"><span class="stat-label">Offline</span><strong class="stat-value offline-value" id="offlineCount">0</strong></article>
+        </section>
+
+        <section>
+            <div class="heading-row">
+                <h2>Client status</h2>
+                <button class="refresh-button" type="button" id="refreshButton">↻ Refresh</button>
+            </div>
+            <div class="devices-grid" id="devicesGrid" aria-live="polite"></div>
+            <p class="updated" id="updatedAt"></p>
+        </section>
+    </main>
+
+    <script>
+        const DEVICES_API = '/api/devices';
+        const devicesGrid = document.getElementById('devicesGrid');
+        const totalCount = document.getElementById('totalCount');
+        const onlineCount = document.getElementById('onlineCount');
+        const offlineCount = document.getElementById('offlineCount');
+        const updatedAt = document.getElementById('updatedAt');
+        const refreshButton = document.getElementById('refreshButton');
+
+        function normaliseDevices(payload) {
+            // JSON from the server:
+            // {"client-a":{"status":"online","last_online_at":null}}
+            if (payload && Array.isArray(payload.devices)) {
+                return payload.devices.map(device => ({
+                    name: device.name,
+                    status: device.status,
+                    lastOnlineAt: device.last_online_at
+                }));
+            }
+            if (payload && typeof payload === 'object') {
+                return Object.entries(payload).map(([name, device]) => ({
+                    name,
+                    status: typeof device === 'object' ? device.status : device,
+                    lastOnlineAt: typeof device === 'object' ? device.last_online_at : null
+                }));
+            }
+            return [];
+        }
+
+        function isOnline(status) {
+            return String(status).trim().toLowerCase() === 'online';
+        }
+
+        function showEmpty(title, detail) {
+            devicesGrid.replaceChildren();
+            const state = document.createElement('div');
+            state.className = 'empty-state';
+            const titleElement = document.createElement('strong');
+            titleElement.textContent = title;
+            const detailElement = document.createElement('span');
+            detailElement.textContent = detail;
+            state.append(titleElement, detailElement);
+            devicesGrid.append(state);
+        }
+
+        function formatLastOnline(value) {
+            if (!value) return 'Last online: not recorded yet';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return 'Last online: not recorded yet';
+            return `Last online: ${date.toLocaleString()}`;
+        }
+
+        async function deleteDevice(name, button) {
+            if (!window.confirm(`Delete ${name} and its saved history?`)) return;
+
+            button.disabled = true;
+            try {
+                const response = await fetch(DEVICES_API, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                if (!response.ok) throw new Error('Delete failed');
+                loadDevices();
+            } catch (error) {
+                button.disabled = false;
+                window.alert('Could not delete this device. Please try again.');
+            }
+        }
+
+        function renderDevices(devices) {
+            const validDevices = devices.filter(device => typeof device.name === 'string' && device.name.trim());
+            const online = validDevices.filter(device => isOnline(device.status)).length;
+            totalCount.textContent = validDevices.length;
+            onlineCount.textContent = online;
+            offlineCount.textContent = validDevices.length - online;
+
+            if (!validDevices.length) {
+                showEmpty('No devices found', 'No client status has been received yet.');
+                return;
+            }
+
+            devicesGrid.replaceChildren();
+            validDevices.forEach(device => {
+                const onlineNow = isOnline(device.status);
+                const statusText = onlineNow ? 'online' : 'offline';
+                const card = document.createElement('article');
+                card.className = `device-card ${statusText}`;
+
+                const icon = document.createElement('div');
+                icon.className = 'device-icon';
+                icon.textContent = '⌁';
+
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'delete-device';
+                deleteButton.type = 'button';
+                deleteButton.textContent = 'Delete';
+                deleteButton.addEventListener('click', () => deleteDevice(device.name, deleteButton));
+
+                const name = document.createElement('strong');
+                name.className = 'device-name';
+                name.title = device.name;
+                name.textContent = device.name;
+
+                const status = document.createElement('span');
+                status.className = `status ${statusText}`;
+                const dot = document.createElement('span');
+                dot.className = 'status-dot';
+                status.append(dot, document.createTextNode(statusText));
+
+                const lastOnline = document.createElement('p');
+                lastOnline.className = 'last-online';
+                lastOnline.textContent = formatLastOnline(device.lastOnlineAt);
+
+                card.append(icon, deleteButton, name, status, lastOnline);
+                devicesGrid.append(card);
+            });
+        }
+
+        async function loadDevices() {
+            refreshButton.disabled = true;
+            refreshButton.textContent = 'Refreshing…';
+            try {
+                const response = await fetch(DEVICES_API, { cache: 'no-store' });
+                if (!response.ok) throw new Error('Unable to load device status');
+                renderDevices(normaliseDevices(await response.json()));
+                updatedAt.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                totalCount.textContent = onlineCount.textContent = offlineCount.textContent = '–';
+                showEmpty('Device status is unavailable', 'Check that the /api/devices endpoint returns JSON.');
+                updatedAt.textContent = '';
+            } finally {
+                refreshButton.disabled = false;
+                refreshButton.textContent = '↻ Refresh';
+            }
+        }
+
+        refreshButton.addEventListener('click', loadDevices);
+        loadDevices();
+        window.setInterval(loadDevices, 5000);
+    </script>
+</body>
+</html>
