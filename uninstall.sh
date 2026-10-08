@@ -37,8 +37,10 @@ fi
 
 info "Stopping services..."
 
-systemctl stop mqtt-gui.service 2>/dev/null || true
-systemctl stop mosquitto-project.service 2>/dev/null || true
+systemctl stop iot-gateway-web.service 2>/dev/null || true
+systemctl stop iot-gateway-broker.service 2>/dev/null || true
+systemctl stop iot-gateway-websocket.service 2>/dev/null || true
+systemctl stop mqtt-gui.service mosquitto-project.service 2>/dev/null || true
 
 #######################################
 # Disable Services
@@ -46,8 +48,10 @@ systemctl stop mosquitto-project.service 2>/dev/null || true
 
 info "Disabling services..."
 
-systemctl disable mqtt-gui.service 2>/dev/null || true
-systemctl disable mosquitto-project.service 2>/dev/null || true
+systemctl disable iot-gateway-web.service 2>/dev/null || true
+systemctl disable iot-gateway-broker.service 2>/dev/null || true
+systemctl disable iot-gateway-websocket.service 2>/dev/null || true
+systemctl disable mqtt-gui.service mosquitto-project.service 2>/dev/null || true
 
 #######################################
 # Remove Service Files
@@ -55,8 +59,14 @@ systemctl disable mosquitto-project.service 2>/dev/null || true
 
 info "Removing service files..."
 
-rm -f /etc/systemd/system/mqtt-gui.service
-rm -f /etc/systemd/system/mosquitto-project.service
+rm -f /etc/systemd/system/iot-gateway-web.service
+rm -f /etc/systemd/system/iot-gateway-broker.service
+rm -f /etc/systemd/system/iot-gateway-websocket.service
+rm -f /etc/systemd/system/mqtt-gui.service /etc/systemd/system/mosquitto-project.service
+rm -f /usr/local/bin/iot-gateway
+rm -f /usr/local/bin/iot-nexus
+rm -rf /etc/systemd/system/iot-gateway-web.service.d
+rm -rf /etc/iot-gateway /usr/local/lib/iot-gateway
 rm -f /etc/sudoers.d/mqtt-gui
 
 systemctl daemon-reload
@@ -92,12 +102,11 @@ success "Uninstall completed."
 echo
 echo "Removed:"
 echo "  - /opt/$PROJECT_NAME"
-echo "  - mqtt-gui.service"
-echo "  - mosquitto-project.service"
+echo "  - iot-gateway-web.service"
+echo "  - iot-gateway-broker.service"
+echo "  - iot-gateway-websocket.service and iot-nexus / iot-gateway commands"
 echo "  - mqtt-gui system user"
 echo "  - mosquitto"
 echo "  - mosquitto-clients"
 echo
-
-
 

@@ -1,6 +1,7 @@
 .mqtt_credentials
 .mqtt_passwords
+vpn.key
 device_status.db
 login_signup.db
 login_signup.db
-/__pycache__
+__pycache__/

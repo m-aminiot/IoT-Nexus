@@ -92,7 +92,7 @@ def save_config():
         tmp.write_text(json.dumps(data, indent=4, sort_keys=True), encoding="utf-8")
         tmp.replace(CONFIG_PATH)
         set_mosquitto.write(data)
-        subprocess.run(["sudo", "systemctl", "restart", "mosquitto-project.service"], check=True, capture_output=True, text=True, timeout=30)
+        subprocess.run(["sudo", "systemctl", "restart", "iot-gateway-broker.service"], check=True, capture_output=True, text=True, timeout=30)
         return jsonify({"status": "ok"})
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         if backup.exists(): backup.replace(CONFIG_PATH)

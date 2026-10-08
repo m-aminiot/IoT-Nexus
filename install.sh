@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -e
+umask 022
 
 #######################################
 # Project Configuration
@@ -70,6 +71,13 @@ if [[ ! -f "mosquitto.conf" ]]; then
     exit 1
 fi
 
+for required_file in iot-gateway.sh runner_vpn.py vpn_crypto.py Tun.py uninstall.sh; do
+    if [[ ! -f "$required_file" ]]; then
+        error "$required_file not found."
+        exit 1
+    fi
+done
+
 #######################################
 # Update Packages
 #######################################
@@ -88,6 +96,7 @@ apt install -y \
     python3 \
     python3-pip \
     python3-venv \
+    iproute2 \
     sudo \
     mosquitto \
     mosquitto-clients
@@ -113,6 +122,15 @@ success "Python Version: $VERSION"
 #######################################
 
 info "Installing project..."
+
+# Stop previous and current units before replacing application files.
+for service in mosquitto-project.service mqtt-gui.service iot-gateway-broker.service iot-gateway-web.service iot-gateway-websocket.service; do
+    systemctl stop "$service" 2>/dev/null || true
+done
+for service in mosquitto-project.service mqtt-gui.service; do
+    systemctl disable "$service" 2>/dev/null || true
+    rm -f "/etc/systemd/system/$service"
+done
 
 rm -rf "$INSTALL_DIR"
 
@@ -185,16 +203,28 @@ chown mosquitto:mosquitto "$INSTALL_DIR/.mqtt_passwords"
 
 chmod 751 "$INSTALL_DIR"
 
+# Source file modes may be 600 on the development machine. The web service
+# must be able to import root-owned Python modules and read its templates.
+find "$INSTALL_DIR" -maxdepth 1 -type f -name '*.py' -exec chmod 644 '{}' +
+find "$INSTALL_DIR/templates" -type d -exec chmod 755 '{}' +
+find "$INSTALL_DIR/templates" -type f -name '*.html' -exec chmod 644 '{}' +
+for database in "$INSTALL_DIR"/login_signup.db* "$INSTALL_DIR"/device_status.db*; do
+    if [[ -f "$database" && ! -L "$database" ]]; then
+        chown "$APP_USER:$APP_GROUP" "$database"
+        chmod 600 "$database"
+    fi
+done
+
 chmod 644 "$INSTALL_DIR/mosquitto.conf"
 chmod 640 "$INSTALL_DIR/json.json"
 chmod 600 "$INSTALL_DIR/login_signup.db" 2>/dev/null || true
 chmod 600 "$INSTALL_DIR/.mqtt_credentials"
 chmod 600 "$INSTALL_DIR/.mqtt_passwords"
 
-sed -i "s|password_file \./.mqtt_passwords|password_file $INSTALL_DIR/.mqtt_passwords|" "$INSTALL_DIR/mosquitto.conf"
+sed -i "s|^password_file .*\.mqtt_passwords$|password_file $INSTALL_DIR/.mqtt_passwords|" "$INSTALL_DIR/mosquitto.conf"
 
 cat > /etc/sudoers.d/mqtt-gui << EOF
-$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart mosquitto-project.service
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart iot-gateway-broker.service
 EOF
 chmod 440 /etc/sudoers.d/mqtt-gui
 visudo -cf /etc/sudoers.d/mqtt-gui >/dev/null
@@ -218,9 +248,9 @@ success "Default Mosquitto disabled."
 
 info "Creating Mosquitto service..."
 
-cat > /etc/systemd/system/mosquitto-project.service << EOF
+cat > /etc/systemd/system/iot-gateway-broker.service << EOF
 [Unit]
-Description=MQTT GUI Mosquitto Broker
+Description=IoT Gateway MQTT Broker
 After=network.target
 
 [Service]
@@ -246,10 +276,10 @@ success "Mosquitto service created."
 
 info "Creating Flask service..."
 
-cat > /etc/systemd/system/mqtt-gui.service << EOF
+cat > /etc/systemd/system/iot-gateway-web.service << EOF
 [Unit]
-Description=MQTT GUI Web Panel
-After=network.target mosquitto-project.service
+Description=IoT Gateway Web Panel
+After=network.target iot-gateway-broker.service
 
 [Service]
 Type=simple
@@ -258,6 +288,7 @@ User=$APP_USER
 Group=$APP_GROUP
 WorkingDirectory=$INSTALL_DIR
 Environment="SECRET_KEY=$SECRET_KEY"
+EnvironmentFile=-/etc/iot-gateway/panel.env
 
 ExecStart=$INSTALL_DIR/venv/bin/python $INSTALL_DIR/main.py
 
@@ -269,6 +300,50 @@ WantedBy=multi-user.target
 EOF
 
 success "Flask service created."
+
+#######################################
+# Install Terminal Menu and Root WebSocket Service
+#######################################
+
+info "Installing IoT Gateway terminal menu and WebSocket VPN..."
+
+install -o root -g root -m 755 "$INSTALL_DIR/iot-gateway.sh" /usr/local/bin/iot-gateway
+install -o root -g root -m 755 "$INSTALL_DIR/iot-gateway.sh" /usr/local/bin/iot-nexus
+install -d -o root -g root -m 755 /etc/iot-gateway /usr/local/lib/iot-gateway
+install -o root -g root -m 644 "$INSTALL_DIR/uninstall.sh" /usr/local/lib/iot-gateway/uninstall.sh
+if [[ ! -f /etc/iot-gateway/websocket.env ]]; then
+    printf 'VPN_PORT=8765\n' > /etc/iot-gateway/websocket.env
+fi
+chown root:root /etc/iot-gateway/websocket.env
+chmod 644 /etc/iot-gateway/websocket.env
+
+# Keep root-executed code outside the web user's writable directory.
+install -o root -g root -m 644 "$INSTALL_DIR/runner_vpn.py" "$INSTALL_DIR/vpn_crypto.py" "$INSTALL_DIR/Tun.py" /usr/local/lib/iot-gateway/
+python3 -m venv /usr/local/lib/iot-gateway/venv
+/usr/local/lib/iot-gateway/venv/bin/pip install 'websockets>=14.0,<16.0' 'cryptography>=46.0.3,<47.0'
+# A reinstall preserves the existing VPN key; invalid permissions fail closed.
+/usr/local/lib/iot-gateway/venv/bin/python /usr/local/lib/iot-gateway/vpn_crypto.py init
+
+cat > /etc/systemd/system/iot-gateway-websocket.service << EOF
+[Unit]
+Description=IoT Gateway WebSocket VPN
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/usr/local/lib/iot-gateway
+EnvironmentFile=/etc/iot-gateway/websocket.env
+ExecStart=/usr/local/lib/iot-gateway/venv/bin/python /usr/local/lib/iot-gateway/runner_vpn.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+success "Run iot-nexus to open the menu. Start WebSocket from option 1."
 
 #######################################
 # Reload systemd
@@ -284,8 +359,8 @@ systemctl daemon-reload
 
 info "Enabling services..."
 
-systemctl enable mosquitto-project.service
-systemctl enable mqtt-gui.service
+systemctl enable iot-gateway-broker.service
+systemctl enable iot-gateway-web.service
 
 #######################################
 # Start Services
@@ -293,23 +368,31 @@ systemctl enable mqtt-gui.service
 
 info "Starting services..."
 
-systemctl restart mosquitto-project.service
-systemctl restart mqtt-gui.service
+systemctl restart iot-gateway-broker.service
+systemctl restart iot-gateway-web.service
 
 #######################################
 # Check Status
 #######################################
 
-if systemctl is-active --quiet mosquitto-project.service; then
+if systemctl is-active --quiet iot-gateway-broker.service; then
     success "Mosquitto started successfully."
 else
     error "Mosquitto failed to start."
 fi
 
-if systemctl is-active --quiet mqtt-gui.service; then
-    success "Flask started successfully."
+if (
+    source /usr/local/bin/iot-nexus
+    panel_port=9000
+    if [[ -r "$PANEL_CONFIG" ]]; then
+        panel_port=$(sed -n 's/^PORT=//p' "$PANEL_CONFIG")
+    fi
+    wait_panel_ready
+); then
+    success "Panel is responding to HTTP."
 else
-    error "Flask failed to start."
+    error "Panel failed to become ready."
+    exit 1
 fi
 
 #######################################
@@ -318,24 +401,25 @@ fi
 
 echo
 echo "========================================"
-echo "      MQTT GUI Installed Successfully"
+echo "      iot-nexus Installed Successfully"
 echo "========================================"
 echo
 echo "Project Path:"
 echo "  $INSTALL_DIR"
 echo
 echo "Useful Commands:"
+echo "  iot-nexus"
 echo
 echo "Status:"
-echo "  systemctl status mosquitto-project"
-echo "  systemctl status mqtt-gui"
+echo "  systemctl status iot-gateway-broker"
+echo "  systemctl status iot-gateway-web"
 echo
 echo "Restart:"
-echo "  systemctl restart mosquitto-project"
-echo "  systemctl restart mqtt-gui"
+echo "  systemctl restart iot-gateway-broker"
+echo "  systemctl restart iot-gateway-web"
 echo
 echo "Logs:"
-echo "  journalctl -u mosquitto-project -f"
-echo "  journalctl -u mqtt-gui -f"
+echo "  journalctl -u iot-gateway-broker -f"
+echo "  journalctl -u iot-gateway-web -f"
 echo
 echo "========================================"
