@@ -12,6 +12,7 @@ PANEL_DROPIN="/etc/systemd/system/$WEB_SERVICE.d/10-panel.conf"
 APP_DIR="/opt/mqtt-gui"
 VPN_PYTHON="/usr/local/lib/iot-gateway/venv/bin/python"
 VPN_CRYPTO="/usr/local/lib/iot-gateway/vpn_crypto.py"
+MOSQUITTO_ASSETS="/usr/local/lib/iot-gateway/mosquitto_assets.py"
 
 interactive_screen() {
     [[ -t 0 && -t 1 && "${TERM:-dumb}" != dumb ]]
@@ -461,6 +462,7 @@ manage_gateway() {
         return 1
     fi
     if systemctl is-active --quiet "$VPN_SERVICE"; then vpn_was_active=1; fi
+    prepare_broker_credentials || return 1
     if ! as_root systemctl "$action" "$BROKER_SERVICE"; then
         echo "Broker $action failed."
         return 1
@@ -472,8 +474,111 @@ manage_gateway() {
     echo "iot-nexus $action completed."
 }
 
+mosquitto_asset_action() {
+    if [[ ! -f "$MOSQUITTO_ASSETS" ]]; then
+        echo "Mosquitto manager not installed: $MOSQUITTO_ASSETS"
+        return 1
+    fi
+    as_root python3 "$MOSQUITTO_ASSETS" "$@"
+}
+
+prepare_broker_credentials() {
+    mosquitto_asset_action internal repair
+}
+
+broker_summary() {
+    if systemctl is-active --quiet "$BROKER_SERVICE"; then
+        echo '  Broker: RUN'
+    elif systemctl is-failed --quiet "$BROKER_SERVICE"; then
+        echo '  Broker: ERROR'
+    else
+        echo '  Broker: STOPPED'
+    fi
+}
+
+broker_ready() {
+    local pid sockets
+    systemctl is-active --quiet "$BROKER_SERVICE" || return 1
+    pid=$(systemctl show --property=MainPID --value "$BROKER_SERVICE") || return 1
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+    sockets=$(as_root ss -H -ltnp 'sport = :7556') || return 1
+    [[ "$sockets" == *"pid=$pid,"* ]]
+}
+
+restart_broker() {
+    local attempt
+    prepare_broker_credentials || return 1
+    if as_root systemctl restart "$BROKER_SERVICE"; then
+        for attempt in {1..40}; do
+            if broker_ready; then
+                echo 'Broker: RUN — restarted and listening on port 7556.'
+                return 0
+            fi
+            sleep 0.25
+        done
+    fi
+    echo 'Broker: ERROR — restart failed or listener 7556 is unavailable.'
+    as_root systemctl --no-pager --full status "$BROKER_SERVICE" || true
+    as_root journalctl -u "$BROKER_SERVICE" -n 25 --no-pager || true
+    return 1
+}
+
+mosquitto_password_menu() {
+    local choice
+    while true; do
+        draw_menu 'Mosquitto / Password' '1 - create password file and first user' '2 - add user / update password' '3 - remove user' '4 - list files / paths' '5 - list usernames' '6 - delete password file' '0 - back'
+        read -r -p 'Select: ' choice || return
+        case "$choice" in
+            1) mosquitto_asset_action password create ;;
+            2) mosquitto_asset_action password add-user ;;
+            3) mosquitto_asset_action password remove-user ;;
+            4) mosquitto_asset_action password list ;;
+            5) mosquitto_asset_action password users ;;
+            6) mosquitto_asset_action password delete ;;
+            0) return ;;
+            *) echo 'Invalid option.' ;;
+        esac
+        finish_action
+    done
+}
+
+mosquitto_certificate_menu() {
+    local choice
+    while true; do
+        draw_menu 'Mosquitto / Certificate Self-signed & Certbot' '1 - create self-signed certificate (hostname / IP)' '2 - obtain Certbot certificate (public domain)' '3 - list certificates / paths' '4 - delete certificate and private key' '5 - renew Certbot certificate / refresh copies' '0 - back'
+        read -r -p 'Select: ' choice || return
+        case "$choice" in
+            1) mosquitto_asset_action certificate self-signed ;;
+            2) mosquitto_asset_action certificate certbot ;;
+            3) mosquitto_asset_action certificate list ;;
+            4) mosquitto_asset_action certificate delete ;;
+            5) mosquitto_asset_action certificate renew ;;
+            0) return ;;
+            *) echo 'Invalid option.' ;;
+        esac
+        finish_action
+    done
+}
+
+mosquitto_menu() {
+    local choice
+    while true; do
+        draw_menu 'Mosquitto' '1 - password' '2 - certificate self-signed / Certbot' '3 - restart broker' '0 - back'
+        broker_summary
+        read -r -p 'Select: ' choice || return
+        case "$choice" in
+            1) mosquitto_password_menu ;;
+            2) mosquitto_certificate_menu ;;
+            3) restart_broker; finish_action ;;
+            0) return ;;
+            *) echo 'Invalid option.' ;;
+        esac
+    done
+}
+
 main_menu() {
-    draw_menu 'Control Center' '1 - websocket' '2 - panel management' '3 - restart' '4 - start' '5 - stop' '6 - uninstall' '0 - exit'
+    draw_menu 'Control Center' '1 - websocket' '2 - panel management' '3 - restart' '4 - start' '5 - stop' '6 - uninstall' '7 - mosquitto' '8 - restart broker' '0 - exit'
+    broker_summary
 }
 
 main() {
@@ -492,6 +597,8 @@ main() {
             4) manage_gateway start ;;
             5) manage_gateway stop ;;
             6) if uninstall_gateway; then return 0; fi ;;
+            7) mosquitto_menu; main_menu; continue ;;
+            8) restart_broker; finish_action; main_menu; continue ;;
             0) return 0 ;;
             *) echo "Invalid option." ;;
         esac

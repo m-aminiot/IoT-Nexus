@@ -24,6 +24,52 @@ spec.loader.exec_module(runner)
 
 
 class BrokerConfigTests(unittest.TestCase):
+    def test_all_ports_reject_privileged_and_invalid_values_without_overwriting_config(self):
+        config = json.loads((ROOT / 'json.json').read_text())
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            destination = base / 'mosquitto.conf'
+            destination.write_text('existing configuration\n')
+            with patch.object(set_mosquitto, 'BASE_DIR', base):
+                for key in set_mosquitto.PORT_KEYS:
+                    for port in (0, 90, 1023, 65536, True, '1883', 1883.5):
+                        with self.subTest(key=key, port=port):
+                            with self.assertRaisesRegex(ValueError, '1024 and 65535'):
+                                set_mosquitto.write({**config, key: port})
+                            self.assertEqual(destination.read_text(), 'existing configuration\n')
+
+    def test_port_boundaries_and_reserved_internal_port(self):
+        config = json.loads((ROOT / 'json.json').read_text())
+        for key in set_mosquitto.PORT_KEYS:
+            for port in (1024, 65535):
+                set_mosquitto.validate_ports({**config, key: port})
+        with self.assertRaisesRegex(ValueError, '7556 is reserved'):
+            set_mosquitto.validate_ports({**config, 'port_NonTls(mqtt)': 7556})
+
+    def test_tls_and_non_tls_have_independent_authentication(self):
+        text = self.render(active_TLS=True, active_websocket=True,
+                           allow_anonymous_non_tls=True, allow_anonymous_tls=False,
+                           password_file_non_tls='/non-tls.passwd', password_file_tls='/tls.passwd')
+        listeners = text.split('\nlistener ')[1:]
+        self.assertIn('allow_anonymous true', listeners[1])
+        self.assertNotIn('password_file ', listeners[1])
+        self.assertIn('allow_anonymous false', listeners[2])
+        self.assertIn('password_file /tls.passwd', listeners[2])
+        self.assertIn('allow_anonymous true', listeners[3])
+        text = self.render(active_TLS=True, allow_anonymous_non_tls=False,
+                           allow_anonymous_tls=True, password_file_non_tls='/non-tls.passwd')
+        listeners = text.split('\nlistener ')[1:]
+        self.assertIn('password_file /non-tls.passwd', listeners[1])
+        self.assertNotIn('password_file ', listeners[2])
+
+    def test_legacy_configuration_preserves_policy(self):
+        config = set_mosquitto.normalize_config({'allow_anonymous': False, 'password_file': '/old.passwd'})
+        self.assertNotIn('allow_anonymous', config)
+        self.assertNotIn('password_file', config)
+        for listener in ('non_tls', 'tls'):
+            self.assertFalse(config[f'allow_anonymous_{listener}'])
+            self.assertEqual(config[f'password_file_{listener}'], '/old.passwd')
+
     def render(self, **changes):
         config = json.loads((ROOT / "json.json").read_text())
         config.update(changes)
@@ -33,20 +79,20 @@ class BrokerConfigTests(unittest.TestCase):
             return (Path(directory) / "mosquitto.conf").read_text()
 
     def test_password_files_are_scoped_to_each_listener(self):
-        text = self.render(allow_anonymous=False, active_TLS=True, active_websocket=True,
-                           password_file="/etc/mosquitto/devices.passwd")
+        text = self.render(allow_anonymous_non_tls=False, allow_anonymous_tls=False, active_TLS=True, active_websocket=True,
+                           password_file_non_tls="/etc/mosquitto/devices.passwd", password_file_tls="/etc/mosquitto/devices.passwd")
         self.assertTrue(text.startswith("per_listener_settings true\n"))
         listeners = text.split("\nlistener ")[1:]
         self.assertEqual(len(listeners), 4)
         for listener in listeners:
             self.assertEqual(listener.count("password_file "), 1)
             self.assertIn("allow_anonymous false", listener)
-        self.assertIn(".mqtt_passwords", listeners[0])
+        self.assertIn("/passwords/.mqtt_passwords", listeners[0])
         for listener in listeners[1:]:
             self.assertIn("/etc/mosquitto/devices.passwd", listener)
 
     def test_anonymous_public_listener_keeps_internal_listener_private(self):
-        text = self.render(allow_anonymous=True, active_TLS=False, active_websocket=False)
+        text = self.render(allow_anonymous_non_tls=True, active_TLS=False, active_websocket=False)
         listeners = text.split("\nlistener ")[1:]
         self.assertEqual(len(listeners), 2)
         self.assertIn("allow_anonymous false", listeners[0])
@@ -59,7 +105,8 @@ class BrokerConfigTests(unittest.TestCase):
     def test_generated_config_starts_real_broker_with_two_password_files(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
-            for name in (".mqtt_passwords", "devices.passwd"):
+            (base / 'passwords').mkdir()
+            for name in ("passwords/.mqtt_passwords", "devices.passwd"):
                 subprocess.run([shutil.which("mosquitto_passwd"), "-b", "-c",
                                 str(base / name), "test-user", "test-only-password"],
                                check=True, capture_output=True)
@@ -68,9 +115,9 @@ class BrokerConfigTests(unittest.TestCase):
                 second.bind(("127.0.0.1", 0))
                 internal, external = first.getsockname()[1], second.getsockname()[1]
             config = json.loads((ROOT / "json.json").read_text())
-            config.update({"allow_anonymous": False, "active_TLS": False,
+            config.update({"allow_anonymous_non_tls": False, "active_TLS": False,
                            "active_websocket": False, "port_NonTls(mqtt)": external,
-                           "password_file": str(base / "devices.passwd")})
+                           "password_file_non_tls": str(base / "devices.passwd")})
             with patch.object(set_mosquitto, "BASE_DIR", base):
                 set_mosquitto.write(config)
             path = base / "mosquitto.conf"
@@ -97,6 +144,45 @@ class BrokerConfigTests(unittest.TestCase):
 
 
 class MenuTests(unittest.TestCase):
+    def test_broker_state_is_shown_below_main_menu(self):
+        result, _, _ = self.run_shell('main_menu')
+        self.assertIn('Broker: RUN', result.stdout)
+        self.assertGreater(result.stdout.index('Broker: RUN'), result.stdout.index('7 - mosquitto'))
+        result, _, _ = self.run_shell('broker_summary', active=False)
+        self.assertIn('Broker: STOPPED', result.stdout)
+        result, _, _ = self.run_shell('systemctl() { [[ "$1" == is-failed ]]; }; broker_summary')
+        self.assertIn('Broker: ERROR', result.stdout)
+
+    def test_direct_broker_restart_checks_readiness_and_keeps_other_services_running(self):
+        result, _, log = self.run_shell('broker_ready() { return 0; }; main', '8\n0\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('restarted and listening on port 7556', result.stdout)
+        self.assertIn('restart iot-gateway-broker.service', log)
+        self.assertIn('repair internal credentials', log)
+        self.assertNotIn('restart iot-gateway-web.service', log)
+        self.assertNotIn('restart iot-gateway-websocket.service', log)
+
+    def test_failed_broker_restart_reports_error_and_logs(self):
+        result, _, _ = self.run_shell('broker_ready() { return 1; }; restart_broker')
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn('Broker: ERROR', result.stdout)
+        self.assertIn('service failed to bind', result.stdout)
+
+    def test_missing_internal_credentials_prevent_broker_restart(self):
+        result, _, log = self.run_shell('prepare_broker_credentials() { return 1; }; restart_broker')
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertNotIn('restart iot-gateway-broker.service', log)
+
+    def test_mosquitto_submenus_dispatch_and_return(self):
+        result, _, _ = self.run_shell('mosquitto_asset_action() { echo "asset $*"; }; main',
+                                     '7\n1\n1\n2\n3\n4\n5\n6\n0\n2\n1\n2\n3\n4\n5\n0\n0\n0\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('7 - mosquitto', result.stdout)
+        for action in ('create', 'add-user', 'remove-user', 'list', 'users', 'delete'):
+            self.assertIn(f'asset password {action}', result.stdout)
+        for action in ('self-signed', 'certbot', 'list', 'delete', 'renew'):
+            self.assertIn(f'asset certificate {action}', result.stdout)
+
     def run_shell(self, commands, inputs="", active=True, socket_pid=321):
         with tempfile.TemporaryDirectory() as directory:
             env_file = Path(directory) / "websocket.env"
@@ -157,6 +243,7 @@ journalctl() { echo 'service failed to bind'; }
 ip() { echo '2: eth0 inet 192.0.2.10/24 scope global eth0'; }
 panel_http_ready() { [[ "$TEST_WEB_ACTIVE" == 1 ]]; }
 repair_panel_permissions() { echo 'repair permissions' >> "$TEST_LOG"; }
+prepare_broker_credentials() { echo 'repair internal credentials' >> "$TEST_LOG"; }
 configure_panel_port() { printf 'PORT=%s\n' "$panel_port" > "$PANEL_CONFIG"; }
 ''' + commands
             result = subprocess.run(
@@ -282,7 +369,8 @@ websocket_menu''', "5\n1\n2\n3\n4\n0\n0\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         for action in ("start", "restart", "stop"):
             self.assertIn(f"{action} iot-gateway-web.service\n", log)
-        self.assertNotIn("iot-gateway-broker.service", log)
+        for action in ('start', 'restart', 'stop'):
+            self.assertNotIn(f'{action} iot-gateway-broker.service', log)
         self.assertNotIn("iot-gateway-websocket.service", log)
 
     def test_panel_url_uses_actual_port_and_matches_process(self):
@@ -426,6 +514,35 @@ cat "$PANEL_CONFIG" "$PANEL_DROPIN"''')
 
 
 class PanelIntegrationTests(unittest.TestCase):
+    def test_config_api_rejects_low_ports_before_saving_or_restarting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            copied_app = Path(directory)
+            for name in ('main.py', 'login_signup.py', 'connector.py', 'device_status.py', 'set_mosquitto.py', 'json.json'):
+                shutil.copy2(ROOT / name, copied_app / name)
+            result = subprocess.run([sys.executable, '-c', '''
+import json
+from unittest.mock import patch
+import main
+original = main.CONFIG_PATH.read_bytes()
+config = main.read_config()
+client = main.app.test_client()
+with client.session_transaction() as session:
+    session['logged_in'] = True
+with patch.object(main.set_mosquitto, 'write') as write, patch.object(main.subprocess, 'run') as restart:
+    for key in main.set_mosquitto.PORT_KEYS:
+        for port in (90, 1023, 65536, True, '1883'):
+            response = client.post('/api/config', json={**config, key: port})
+            assert response.status_code == 400, response.get_json()
+            assert '1024 and 65535' in response.get_json()['message']
+            assert main.CONFIG_PATH.read_bytes() == original
+        for port in (1024, 65535):
+            assert main.validate_config({**config, key: port}) is None
+    write.assert_not_called()
+    restart.assert_not_called()
+'''], cwd=copied_app, capture_output=True, text=True, timeout=10,
+                env={**os.environ, 'SECRET_KEY': 'test-config', 'PYTHONDONTWRITEBYTECODE': '1'})
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_actual_flask_process_uses_selected_port_and_http_probe(self):
         """Use real application modules and HTTP, without touching project data."""
         with tempfile.TemporaryDirectory() as directory:

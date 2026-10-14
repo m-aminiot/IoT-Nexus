@@ -34,7 +34,7 @@ def login_required(view):
 
 def read_config():
     with CONFIG_PATH.open(encoding="utf-8") as f:
-        return json.load(f)
+        return set_mosquitto.normalize_config(json.load(f))
 
 
 def validate_config(data):
@@ -44,26 +44,23 @@ def validate_config(data):
     allowed = set(defaults)
     if set(data) != allowed:
         return "Invalid configuration fields"
-    for key in ("port(websocket)", "port_NonTls(mqtt)", "port_Tls(mqtt)"):
-        if type(data[key]) is not int or not 1 <= data[key] <= 65535:
-            return f"{key} must be an integer between 1 and 65535"
-    ports = [data["port_NonTls(mqtt)"]]
-    if data["active_TLS"]: ports.append(data["port_Tls(mqtt)"])
-    if data["active_websocket"]: ports.append(data["port(websocket)"])
-    if len(ports) != len(set(ports)):
-        return "Active listeners must use different ports"
-    for key in ("allow_anonymous", "active_TLS", "active_websocket", "need_cert(for server)"):
+    try:
+        set_mosquitto.validate_ports(data)
+    except ValueError as exc:
+        return str(exc)
+    for key in ("allow_anonymous_non_tls", "allow_anonymous_tls", "active_TLS", "active_websocket", "need_cert(for server)"):
         if type(data[key]) is not bool:
             return f"{key} must be boolean"
-    for key in ("password_file", "certfile", "keyfile", "cafile", "listen_ip(wireguard)"):
-        if not isinstance(data[key], str) or not data[key].strip() or "\x00" in data[key]:
+    for key in ("password_file_non_tls", "password_file_tls", "certfile", "keyfile", "cafile", "listen_ip(wireguard)"):
+        if not isinstance(data[key], str) or not data[key].strip() or any(c in data[key] for c in "\x00\r\n"):
             return f"Invalid {key}"
     if data["active_TLS"]:
         for key in ("certfile", "keyfile"):
             if not Path(data[key]).is_absolute(): return f"{key} must be an absolute path"
         if data["need_cert(for server)"] and not Path(data["cafile"]).is_absolute(): return "cafile must be an absolute path"
-    if not data["allow_anonymous"] and not Path(data["password_file"]).is_absolute():
-        return "password_file must be an absolute path"
+    for listener in ("non_tls", "tls"):
+        if not data[f"allow_anonymous_{listener}"] and not Path(data[f"password_file_{listener}"]).is_absolute():
+            return f"password_file_{listener} must be an absolute path"
     return None
 
 

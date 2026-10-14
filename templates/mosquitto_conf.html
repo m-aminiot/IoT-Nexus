@@ -450,22 +450,38 @@ input[type="text"],input[type="number"]{width:100%!important;max-width:none!impo
                     const formGroup = document.createElement('div');
                     formGroup.className = 'form-group';
                     
-                    const displayLabel = key.replace(/_/g, ' ');
-
+                    const labels = {
+                        allow_anonymous_non_tls: 'Allow anonymous — Non-TLS / WebSocket',
+                        password_file_non_tls: 'Password file — Non-TLS / WebSocket',
+                        allow_anonymous_tls: 'Allow anonymous — TLS',
+                        password_file_tls: 'Password file — TLS'
+                    };
+                    const label = document.createElement('label');
+                    label.htmlFor = key;
+                    label.textContent = labels[key] || key.replace(/_/g, ' ');
+                    formGroup.appendChild(label);
+                    const input = document.createElement('input');
+                    input.id = key;
+                    input.dataset.type = typeof value;
                     if (typeof value === 'boolean') {
-                        formGroup.innerHTML = `
-                            <label for="${key}">${displayLabel}</label>
-                            <label class="switch">
-                                <input type="checkbox" id="${key}" data-type="boolean" ${value ? 'checked' : ''}>
-                                <span class="slider"></span>
-                            </label>
-                        `;
+                        const toggle = document.createElement('label');
+                        toggle.className = 'switch';
+                        input.type = 'checkbox';
+                        input.checked = value;
+                        const slider = document.createElement('span');
+                        slider.className = 'slider';
+                        toggle.append(input, slider);
+                        formGroup.appendChild(toggle);
                     } else {
-                        const inputType = typeof value === 'number' ? 'number' : 'text';
-                        formGroup.innerHTML = `
-                            <label for="${key}">${displayLabel}</label>
-                            <input type="${inputType}" id="${key}" data-type="${typeof value}" value="${value}">
-                        `;
+                        input.type = typeof value === 'number' ? 'number' : 'text';
+                        if (input.type === 'number') {
+                            input.min = '1024';
+                            input.max = '65535';
+                            input.step = '1';
+                            input.required = true;
+                        }
+                        input.value = value;
+                        formGroup.appendChild(input);
                     }
                     fieldsContainer.appendChild(formGroup);
                 }

@@ -9,6 +9,7 @@ umask 022
 
 PROJECT_NAME="mqtt-gui"
 INSTALL_DIR="/opt/$PROJECT_NAME"
+INTERNAL_PASSWORD_FILE="$INSTALL_DIR/passwords/.mqtt_passwords"
 APP_USER="mqtt-gui"
 APP_GROUP="mqtt-gui"
 
@@ -71,12 +72,15 @@ if [[ ! -f "mosquitto.conf" ]]; then
     exit 1
 fi
 
-for required_file in iot-gateway.sh runner_vpn.py vpn_crypto.py Tun.py uninstall.sh; do
+for required_file in iot-gateway.sh runner_vpn.py vpn_crypto.py Tun.py uninstall.sh mosquitto_assets.py set_mosquitto.py json.json; do
     if [[ ! -f "$required_file" ]]; then
         error "$required_file not found."
         exit 1
     fi
 done
+
+# Reject invalid listener ports before changing an existing installation.
+python3 -c 'import json, set_mosquitto; set_mosquitto.validate_ports(json.load(open("json.json", encoding="utf-8")))'
 
 #######################################
 # Update Packages
@@ -99,7 +103,9 @@ apt install -y \
     iproute2 \
     sudo \
     mosquitto \
-    mosquitto-clients
+    mosquitto-clients \
+    openssl \
+    certbot
 
 #######################################
 # Check Python Version
@@ -176,11 +182,12 @@ MQTT_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 install -o "$APP_USER" -g "$APP_GROUP" -m 600 /dev/null "$INSTALL_DIR/.mqtt_credentials"
 printf 'username=%s\npassword=%s\n' "$MQTT_USERNAME" "$MQTT_PASSWORD" > "$INSTALL_DIR/.mqtt_credentials"
 
-install -o mosquitto -g mosquitto -m 600 /dev/null "$INSTALL_DIR/.mqtt_passwords"
-printf '%s:%s\n' "$MQTT_USERNAME" "$MQTT_PASSWORD" > "$INSTALL_DIR/.mqtt_passwords"
-mosquitto_passwd -U "$INSTALL_DIR/.mqtt_passwords"
-chown mosquitto:mosquitto "$INSTALL_DIR/.mqtt_passwords"
-chmod 600 "$INSTALL_DIR/.mqtt_passwords"
+install -d -o root -g mosquitto -m 750 "$INSTALL_DIR/passwords"
+install -o mosquitto -g mosquitto -m 600 /dev/null "$INTERNAL_PASSWORD_FILE"
+printf '%s:%s\n' "$MQTT_USERNAME" "$MQTT_PASSWORD" > "$INTERNAL_PASSWORD_FILE"
+mosquitto_passwd -U "$INTERNAL_PASSWORD_FILE"
+chown mosquitto:mosquitto "$INTERNAL_PASSWORD_FILE"
+chmod 600 "$INTERNAL_PASSWORD_FILE"
 
 unset MQTT_USERNAME MQTT_PASSWORD
 
@@ -199,7 +206,9 @@ chown "$APP_USER:$APP_GROUP" "$INSTALL_DIR/.mqtt_credentials"
 chown "$APP_USER:$APP_GROUP" "$INSTALL_DIR/json.json"
 chown "$APP_USER:$APP_GROUP" "$INSTALL_DIR/login_signup.db" 2>/dev/null || true
 chown "$APP_USER:$APP_GROUP" "$INSTALL_DIR/mosquitto.conf"
-chown mosquitto:mosquitto "$INSTALL_DIR/.mqtt_passwords"
+chown root:mosquitto "$INSTALL_DIR/passwords"
+chown mosquitto:mosquitto "$INTERNAL_PASSWORD_FILE"
+chmod 750 "$INSTALL_DIR/passwords"
 
 chmod 751 "$INSTALL_DIR"
 
@@ -219,9 +228,9 @@ chmod 644 "$INSTALL_DIR/mosquitto.conf"
 chmod 640 "$INSTALL_DIR/json.json"
 chmod 600 "$INSTALL_DIR/login_signup.db" 2>/dev/null || true
 chmod 600 "$INSTALL_DIR/.mqtt_credentials"
-chmod 600 "$INSTALL_DIR/.mqtt_passwords"
+chmod 600 "$INTERNAL_PASSWORD_FILE"
 
-sed -i "s|^password_file .*\.mqtt_passwords$|password_file $INSTALL_DIR/.mqtt_passwords|" "$INSTALL_DIR/mosquitto.conf"
+python3 "$INSTALL_DIR/set_mosquitto.py"
 
 cat > /etc/sudoers.d/mqtt-gui << EOF
 $APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart iot-gateway-broker.service
@@ -311,6 +320,7 @@ install -o root -g root -m 755 "$INSTALL_DIR/iot-gateway.sh" /usr/local/bin/iot-
 install -o root -g root -m 755 "$INSTALL_DIR/iot-gateway.sh" /usr/local/bin/iot-nexus
 install -d -o root -g root -m 755 /etc/iot-gateway /usr/local/lib/iot-gateway
 install -o root -g root -m 644 "$INSTALL_DIR/uninstall.sh" /usr/local/lib/iot-gateway/uninstall.sh
+install -o root -g root -m 644 "$INSTALL_DIR/mosquitto_assets.py" /usr/local/lib/iot-gateway/mosquitto_assets.py
 if [[ ! -f /etc/iot-gateway/websocket.env ]]; then
     printf 'VPN_PORT=8765\n' > /etc/iot-gateway/websocket.env
 fi
