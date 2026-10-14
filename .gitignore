@@ -1,7 +1,12 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.db
+*.db-*
+.venv/
+venv/
 .mqtt_credentials
 .mqtt_passwords
+passwords/
+certificates/
 vpn.key
-device_status.db
-login_signup.db
-login_signup.db
-__pycache__/

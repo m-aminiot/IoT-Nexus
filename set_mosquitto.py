@@ -10,7 +10,7 @@ def validate_ports(config):
         if type(config.get(key)) is not int or not 1024 <= config[key] <= 65535:
             raise ValueError(f'{key} must be an integer between 1024 and 65535')
     ports = [7556, config['port_NonTls(mqtt)']]
-    if config.get('active_TLS'):ESP-IDF
+    if config.get('active_TLS'):
         ports.append(config['port_Tls(mqtt)'])
     if config.get('active_websocket'):
         ports.append(config['port(websocket)'])
