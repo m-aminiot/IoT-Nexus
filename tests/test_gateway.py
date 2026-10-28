@@ -78,6 +78,28 @@ class BrokerConfigTests(unittest.TestCase):
                 set_mosquitto.write(config)
             return (Path(directory) / "mosquitto.conf").read_text()
 
+    def create_password_file(self, path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run([
+            shutil.which("mosquitto_passwd"), "-b", "-c", str(path),
+            "test-user", "test-only-password",
+        ], check=True, capture_output=True, text=True)
+        self.assertTrue(path.is_file(), f"Mosquitto password file was not created: {path}")
+
+    def reserve_ports(self):
+        sockets = [socket.socket(), socket.socket()]
+        try:
+            for sock in sockets:
+                sock.bind(("127.0.0.1", 0))
+            return tuple(sock.getsockname()[1] for sock in sockets)
+        except OSError as error:
+            for sock in sockets:
+                sock.close()
+            self.skipTest(f"localhost sockets are unavailable: {error}")
+        finally:
+            for sock in sockets:
+                sock.close()
+
     def test_password_files_are_scoped_to_each_listener(self):
         text = self.render(allow_anonymous_non_tls=False, allow_anonymous_tls=False, active_TLS=True, active_websocket=True,
                            password_file_non_tls="/etc/mosquitto/devices.passwd", password_file_tls="/etc/mosquitto/devices.passwd")
@@ -105,25 +127,23 @@ class BrokerConfigTests(unittest.TestCase):
     def test_generated_config_starts_real_broker_with_two_password_files(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
-            (base / 'passwords').mkdir()
-            for name in ("passwords/.mqtt_passwords", "devices.passwd"):
-                subprocess.run([shutil.which("mosquitto_passwd"), "-b", "-c",
-                                str(base / name), "test-user", "test-only-password"],
-                               check=True, capture_output=True)
-            with socket.socket() as first, socket.socket() as second:
-                first.bind(("127.0.0.1", 0))
-                second.bind(("127.0.0.1", 0))
-                internal, external = first.getsockname()[1], second.getsockname()[1]
+            internal_file = base / "passwords" / ".mqtt_passwords"
+            external_file = base / "devices.passwd"
+            self.create_password_file(internal_file)
+            self.create_password_file(external_file)
+            internal, external = self.reserve_ports()
             config = json.loads((ROOT / "json.json").read_text())
             config.update({"allow_anonymous_non_tls": False, "active_TLS": False,
                            "active_websocket": False, "port_NonTls(mqtt)": external,
-                           "password_file_non_tls": str(base / "devices.passwd")})
+                           "password_file_non_tls": str(external_file)})
             with patch.object(set_mosquitto, "BASE_DIR", base):
                 set_mosquitto.write(config)
             path = base / "mosquitto.conf"
-            path.write_text(path.read_text().replace("listener 7556 127.0.0.1",
-                            f"listener {internal} 127.0.0.1").replace(
-                            f"listener {external}\n", f"listener {external} 127.0.0.1\n"))
+            text = path.read_text().replace("listener 7556 127.0.0.1", f"listener {internal} 127.0.0.1")
+            text = text.replace(f"listener {external}\n", f"listener {external} 127.0.0.1\n")
+            path.write_text(text)
+            self.assertIn(f"password_file {internal_file}", text)
+            self.assertIn(f"password_file {external_file}", text)
             process = subprocess.Popen([shutil.which("mosquitto"), "-c", str(path)],
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             try:
@@ -154,13 +174,17 @@ class MenuTests(unittest.TestCase):
         self.assertIn('Broker: ERROR', result.stdout)
 
     def test_direct_broker_restart_checks_readiness_and_keeps_other_services_running(self):
-        result, _, log = self.run_shell('broker_ready() { return 0; }; main', '8\n0\n')
+        result, _, log = self.run_shell('broker_ready() { return 0; }; mosquitto_menu', '3\n0\n')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('restarted and listening on port 7556', result.stdout)
         self.assertIn('restart iot-gateway-broker.service', log)
         self.assertIn('repair internal credentials', log)
         self.assertNotIn('restart iot-gateway-web.service', log)
         self.assertNotIn('restart iot-gateway-websocket.service', log)
+
+    def test_main_menu_does_not_expose_direct_broker_restart(self):
+        result, _, _ = self.run_shell('main_menu')
+        self.assertNotIn('8 - restart broker', result.stdout)
 
     def test_failed_broker_restart_reports_error_and_logs(self):
         result, _, _ = self.run_shell('broker_ready() { return 1; }; restart_broker')

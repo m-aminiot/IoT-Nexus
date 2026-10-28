@@ -577,7 +577,7 @@ mosquitto_menu() {
 }
 
 main_menu() {
-    draw_menu 'Control Center' '1 - websocket' '2 - panel management' '3 - restart' '4 - start' '5 - stop' '6 - uninstall' '7 - mosquitto' '8 - restart broker' '0 - exit'
+    draw_menu 'Control Center' '1 - websocket' '2 - panel management' '3 - restart' '4 - start' '5 - stop' '6 - uninstall' '7 - mosquitto' '0 - exit'
     broker_summary
 }
 
@@ -598,7 +598,6 @@ main() {
             5) manage_gateway stop ;;
             6) if uninstall_gateway; then return 0; fi ;;
             7) mosquitto_menu; main_menu; continue ;;
-            8) restart_broker; finish_action; main_menu; continue ;;
             0) return 0 ;;
             *) echo "Invalid option." ;;
         esac

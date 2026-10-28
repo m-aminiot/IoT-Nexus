@@ -171,6 +171,19 @@ Run the test suite when its Python test runner is installed:
 python -m unittest discover -s tests -v
 ```
 
+The gateway tests include a real Mosquitto integration check. When both
+`mosquitto` and `mosquitto_passwd` are installed, it creates temporary internal
+and public password files, generates a temporary configuration, starts a
+broker on temporary localhost ports, and verifies that both listeners open:
+
+```bash
+python -m unittest tests.test_gateway.BrokerConfigTests.test_generated_config_starts_real_broker_with_two_password_files -v
+```
+
+The test uses only temporary files and ports, so it does not modify the
+installed broker configuration. If Mosquitto is unavailable, the integration
+test is skipped; the remaining gateway and configuration tests still run.
+
 Compile-check the Python sources with:
 
 ```bash
