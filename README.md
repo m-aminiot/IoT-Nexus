@@ -2,7 +2,7 @@
 
 [راهنمای فارسی — Persian README](README.FA.md)
 
-![IoT Nexus terminal control center](picture/Screenshot%201405-08-07%20at%2001.13.40.png)
+![IoT Nexus terminal control center](picture/CLI-PANEL)
 
 *Terminal menu screenshot; available options can differ from the current version.*
 
