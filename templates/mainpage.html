@@ -135,6 +135,16 @@
             background: rgba(167, 139, 250, .13);
         }
 
+        .messages:hover {
+            border-color: #34d399;
+            background: rgba(52, 211, 153, .11);
+        }
+
+        .messages .icon {
+            color: #34d399;
+            background: rgba(52, 211, 153, .13);
+        }
+
         .copy {
             flex: 1;
         }
@@ -198,6 +208,15 @@
                 <span class="copy">
                     <strong>Devices</strong>
                     <small>View and manage devices connected to your broker</small>
+                </span>
+                <span class="arrow">→</span>
+            </a>
+
+            <a class="action messages" href="/messages">
+                <span class="icon">✉</span>
+                <span class="copy">
+                    <strong>Messages</strong>
+                    <small>Choose topics to collect and queue their incoming messages</small>
                 </span>
                 <span class="arrow">→</span>
             </a>

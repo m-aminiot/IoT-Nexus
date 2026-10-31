@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages · MQTT Control Center</title>
+    <style>
+        :root {
+            --bg: #070b14;
+            --panel: rgba(17, 24, 39, .76);
+            --panel-hover: rgba(30, 41, 59, .82);
+            --border: rgba(148, 163, 184, .16);
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --cyan: #38bdf8;
+            --green: #34d399;
+            --red: #fb7185;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            padding: 32px 24px;
+            color: var(--text);
+            font-family: Inter, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at 12% 8%, rgba(56, 189, 248, .17), transparent 28%),
+                radial-gradient(circle at 88% 92%, rgba(52, 211, 153, .12), transparent 30%),
+                var(--bg);
+        }
+
+        .page { width: min(1100px, 100%); margin: 0 auto; }
+
+        .topbar, .heading-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+
+        .back-link {
+            color: var(--muted);
+            font-size: 14px;
+            text-decoration: none;
+            transition: color .2s ease;
+        }
+
+        .back-link:hover { color: var(--cyan); }
+
+        .live-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            color: #bbf7d0;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            border: 1px solid rgba(52, 211, 153, .25);
+            border-radius: 999px;
+            background: rgba(52, 211, 153, .08);
+        }
+
+        .live-pill.error {
+            color: #fecdd3;
+            border-color: rgba(251, 113, 133, .3);
+            background: rgba(251, 113, 133, .08);
+        }
+
+        .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
+        .live-pill.error .pulse { background: var(--red); box-shadow: 0 0 12px var(--red); }
+
+        header { margin: 68px 0 34px; }
+        .eyebrow { color: var(--cyan); font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+        h1 { margin: 12px 0 10px; font-size: clamp(34px, 6vw, 60px); letter-spacing: -2.5px; line-height: 1; }
+        .subtitle { max-width: 620px; margin: 0; color: var(--muted); line-height: 1.65; }
+        .subtitle code { color: var(--cyan); }
+
+        .add-topic {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 34px;
+            padding: 20px;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            background: var(--panel);
+        }
+
+        .topic-input {
+            flex: 1;
+            min-width: 0;
+            padding: 13px 15px;
+            color: var(--text);
+            font: inherit;
+            font-size: 15px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(7, 11, 20, .6);
+            outline: none;
+            transition: border-color .2s ease;
+        }
+
+        .topic-input:focus { border-color: var(--cyan); }
+        .topic-input::placeholder { color: var(--muted); }
+
+        .add-button {
+            padding: 13px 20px;
+            color: #06202d;
+            font: inherit;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            border: 0;
+            border-radius: 12px;
+            background: var(--cyan);
+            transition: filter .2s ease;
+        }
+
+        .add-button:hover { filter: brightness(1.1); }
+        .add-button:disabled { cursor: wait; filter: grayscale(.4); opacity: .7; }
+
+        h2 { margin: 0; font-size: 20px; }
+        .topic-count { color: var(--muted); font-size: 13px; }
+        .heading-row { margin-bottom: 16px; }
+
+        .refresh-button {
+            padding: 10px 14px;
+            color: var(--text);
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, .05);
+            transition: background .2s ease, border-color .2s ease;
+        }
+
+        .refresh-button:hover { border-color: var(--cyan); background: rgba(56, 189, 248, .12); }
+
+        .topics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 14px; }
+
+        .topic-card {
+            position: relative;
+            min-height: 128px;
+            padding: 20px;
+            border: 1px solid rgba(52, 211, 153, .3);
+            border-radius: 18px;
+            background: var(--panel);
+            transition: transform .2s ease, background .2s ease;
+        }
+
+        .topic-card:hover { transform: translateY(-3px); background: var(--panel-hover); }
+
+        .topic-icon {
+            display: grid;
+            place-items: center;
+            width: 39px;
+            height: 39px;
+            border-radius: 12px;
+            color: var(--green);
+            font-size: 18px;
+            background: rgba(52, 211, 153, .12);
+        }
+
+        .topic-name {
+            display: block;
+            margin: 18px 0 8px;
+            overflow-wrap: anywhere;
+            font-size: 15px;
+            font-weight: 750;
+        }
+
+        .listening { display: inline-flex; align-items: center; gap: 8px; color: var(--green); font-size: 13px; font-weight: 650; }
+        .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 13px var(--green); }
+
+        .delete-topic {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            padding: 7px 9px;
+            color: var(--red);
+            font: inherit;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid rgba(251, 113, 133, .28);
+            border-radius: 8px;
+            background: rgba(251, 113, 133, .08);
+        }
+
+        .delete-topic:hover { background: rgba(251, 113, 133, .18); }
+        .delete-topic:disabled { cursor: wait; opacity: .6; }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            padding: 58px 20px;
+            color: var(--muted);
+            text-align: center;
+            border: 1px dashed var(--border);
+            border-radius: 18px;
+            background: rgba(15, 23, 42, .4);
+        }
+
+        .empty-state strong { display: block; margin-bottom: 8px; color: var(--text); font-size: 16px; }
+
+        .log {
+            margin-top: 22px;
+            padding: 14px 16px;
+            color: var(--muted);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            line-height: 1.75;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: rgba(7, 11, 20, .55);
+        }
+
+        .log[hidden] { display: none; }
+        .log-line { white-space: pre-wrap; overflow-wrap: anywhere; }
+        .log-line.error { color: var(--red); }
+        .log-line.ok { color: var(--green); }
+
+        @media (max-width: 620px) {
+            body { padding: 22px 16px; }
+            header { margin-top: 48px; }
+            h1 { letter-spacing: -1.5px; }
+            .add-topic { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <div class="topbar">
+            <a class="back-link" href="/mainpage">← Back to dashboard</a>
+            <span class="live-pill" id="statusPill"><span class="pulse"></span><span id="statusLabel">Checking…</span></span>
+        </div>
+
+        <header>
+            <div class="eyebrow">MQTT Control Center</div>
+            <h1>Message topics</h1>
+            <p class="subtitle">
+                Subscribe the gateway to topics on your broker. Every incoming message is
+                queued as <code>{ topic: message }</code> until you collect it.
+            </p>
+        </header>
+
+        <form class="add-topic" id="topicForm">
+            <input class="topic-input" id="topicInput" type="text" autocomplete="off"
+                   placeholder="e.g. home/kitchen/temperature" aria-label="Topic">
+            <button class="add-button" type="submit" id="addButton">Add topic</button>
+        </form>
+
+        <section>
+            <div class="heading-row">
+                <h2>Subscribed topics <span class="topic-count" id="topicCount"></span></h2>
+                <button class="refresh-button" type="button" id="refreshButton">↻ Refresh</button>
+            </div>
+            <div class="topics-grid" id="topicsGrid" aria-live="polite"></div>
+            <div class="log" id="log" hidden aria-live="polite"></div>
+        </section>
+    </main>
+
+    <script>
+        const TOPICS_API = '/api/topics';
+        const topicForm = document.getElementById('topicForm');
+        const topicInput = document.getElementById('topicInput');
+        const addButton = document.getElementById('addButton');
+        const refreshButton = document.getElementById('refreshButton');
+        const topicsGrid = document.getElementById('topicsGrid');
+        const topicCount = document.getElementById('topicCount');
+        const statusPill = document.getElementById('statusPill');
+        const statusLabel = document.getElementById('statusLabel');
+        const logBox = document.getElementById('log');
+        let lastLogLine = '';
+
+        // Small error log: the same line is never written twice in a row.
+        function log(text, kind) {
+            if (!text || text === lastLogLine) return;
+            lastLogLine = text;
+            const line = document.createElement('div');
+            line.className = `log-line ${kind || ''}`.trim();
+            line.textContent = `${new Date().toLocaleTimeString()}  ${text}`;
+            logBox.append(line);
+            logBox.hidden = false;
+            while (logBox.childElementCount > 6) logBox.firstElementChild.remove();
+        }
+
+        function showStatus(payload) {
+            const connected = Boolean(payload.connected);
+            const error = payload.error || 'The broker is unavailable';
+            statusPill.classList.toggle('error', !connected);
+            statusLabel.textContent = connected ? 'Listening' : 'Broker offline';
+            if (connected) log(`Listening on ${(payload.topics || []).length} topic(s)`, 'ok');
+            else log(error, 'error');
+        }
+
+        // One place for every topic request, so the log always shows the real
+        // reason (HTTP status, the API message, or the browser/network error).
+        async function topicsRequest(method, body) {
+            const response = await fetch(TOPICS_API, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: body === undefined ? undefined : JSON.stringify(body)
+            });
+            const text = await response.text();
+            let payload = null;
+            try {
+                payload = JSON.parse(text);
+            } catch (error) {
+                payload = null;
+            }
+            if (!response.ok) {
+                if (payload && payload.error) throw new Error(payload.error);
+                const snippet = text.trim().replace(/\s+/g, ' ').slice(0, 160);
+                throw new Error(`HTTP ${response.status} ${response.statusText}${snippet ? ` — ${snippet}` : ''}`);
+            }
+            if (!payload) throw new Error(`HTTP ${response.status} but the response was not JSON`);
+            return payload;
+        }
+
+        function showEmpty(title, detail) {
+            topicsGrid.replaceChildren();
+            const state = document.createElement('div');
+            state.className = 'empty-state';
+            const titleElement = document.createElement('strong');
+            titleElement.textContent = title;
+            const detailElement = document.createElement('span');
+            detailElement.textContent = detail;
+            state.append(titleElement, detailElement);
+            topicsGrid.append(state);
+        }
+
+        async function deleteTopic(topic, button) {
+            if (!window.confirm(`Stop listening to ${topic}?`)) return;
+
+            button.disabled = true;
+            try {
+                const payload = await topicsRequest('DELETE', { topic });
+                showStatus(payload);
+                renderTopics(payload.topics, payload.connected);
+            } catch (error) {
+                button.disabled = false;
+                log(`Removing "${topic}" failed — ${error.message}`, 'error');
+            }
+        }
+
+        function renderTopics(topics, connected) {
+            const validTopics = (topics || []).filter(topic => typeof topic === 'string' && topic.trim());
+            topicCount.textContent = validTopics.length ? `· ${validTopics.length}` : '';
+
+            if (!validTopics.length) {
+                showEmpty('No topics yet', 'Add a topic above to start collecting messages.');
+                return;
+            }
+
+            topicsGrid.replaceChildren();
+            validTopics.forEach(topic => {
+                const card = document.createElement('article');
+                card.className = 'topic-card';
+
+                const icon = document.createElement('div');
+                icon.className = 'topic-icon';
+                icon.textContent = '#';
+
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'delete-topic';
+                deleteButton.type = 'button';
+                deleteButton.textContent = 'Delete';
+                deleteButton.addEventListener('click', () => deleteTopic(topic, deleteButton));
+
+                const name = document.createElement('strong');
+                name.className = 'topic-name';
+                name.title = topic;
+                name.textContent = topic;
+
+                const listening = document.createElement('span');
+                listening.className = 'listening';
+                const dot = document.createElement('span');
+                dot.className = 'dot';
+                listening.append(dot, document.createTextNode(connected ? 'listening' : 'saved · waiting for broker'));
+
+                card.append(icon, deleteButton, name, listening);
+                topicsGrid.append(card);
+            });
+        }
+
+        async function loadTopics() {
+            try {
+                const payload = await topicsRequest('GET');
+                showStatus(payload);
+                renderTopics(payload.topics, payload.connected);
+            } catch (error) {
+                showStatus({ connected: false, error: `Topics are unavailable — ${error.message}` });
+                showEmpty('Topics are unavailable', 'Check that the /api/topics endpoint returns JSON.');
+                topicCount.textContent = '';
+            }
+        }
+
+        topicForm.addEventListener('submit', async event => {
+            event.preventDefault();
+            const topic = topicInput.value.trim();
+            if (!topic) return;
+
+            addButton.disabled = true;
+            try {
+                const payload = await topicsRequest('POST', { topic });
+                topicInput.value = '';
+                showStatus(payload);
+                renderTopics(payload.topics, payload.connected);
+            } catch (error) {
+                log(`Adding "${topic}" failed — ${error.message}`, 'error');
+            } finally {
+                addButton.disabled = false;
+            }
+        });
+
+        refreshButton.addEventListener('click', loadTopics);
+        loadTopics();
+        window.setInterval(loadTopics, 5000);
+    </script>
+</body>
+</html>

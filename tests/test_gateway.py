@@ -724,6 +724,34 @@ original_save = crypto.save_key
 
 
 class EncryptedRunnerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_tun_hub_broadcasts_one_packet_to_multiple_clients(self):
+        class FakeWebSocket:
+            def __init__(self):
+                self.frames = []
+                self.closed = False
+
+            async def send(self, frame):
+                self.frames.append(frame)
+
+            async def close(self, **kwargs):
+                self.closed = True
+
+        hub = runner.TunnelHub(Mock())
+        key = os.urandom(32)
+        server_a = crypto.PacketCipher(key, b"s" * 32, b"a" * 32, server=True)
+        client_a = crypto.PacketCipher(key, b"s" * 32, b"a" * 32, server=False)
+        server_b = crypto.PacketCipher(key, b"s" * 32, b"b" * 32, server=True)
+        client_b = crypto.PacketCipher(key, b"s" * 32, b"b" * 32, server=False)
+        ws_a, ws_b = FakeWebSocket(), FakeWebSocket()
+        await hub.add(ws_a, server_a)
+        await hub.add(ws_b, server_b)
+
+        await hub.broadcast(b"packet from tun")
+
+        self.assertEqual(crypto.decrypt_packet(ws_a.frames[0], client_a), b"packet from tun")
+        self.assertEqual(crypto.decrypt_packet(ws_b.frames[0], client_b), b"packet from tun")
+        self.assertEqual(len(hub.clients), 2)
+
     async def test_missing_key_fails_before_tun_creation(self):
         with patch.object(runner, "load_key", side_effect=FileNotFoundError), patch.object(runner, "TUNInterface") as tun:
             with self.assertRaises(FileNotFoundError):

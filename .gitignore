@@ -7,6 +7,7 @@ __pycache__/
 venv/
 .mqtt_credentials
 .mqtt_passwords
+message_topics.json
 passwords/
 certificates/
 vpn.key

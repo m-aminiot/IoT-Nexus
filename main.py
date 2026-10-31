@@ -112,6 +112,11 @@ def get_mosquitto_panel(): return render_template("mosquitto_conf.html")
 def get_devices_page(): return render_template("devices.html")
 
 
+@app.get("/messages")
+@login_required
+def get_messages_page(): return render_template("messages.html")
+
+
 @app.get("/login")
 def get_login_page(): return render_template("login.html")
 
@@ -169,6 +174,50 @@ def remove_device():
     if not removed:
         return jsonify({"error": "Device not found"}), 404
     return jsonify({"status": "ok"})
+
+
+def topics_response(status=None):
+    """Answer as JSON, even when the broker or the topic store misbehaves."""
+    try:
+        connected, error = connector.listener_status()
+        payload = {"topics": connector.get_topics(), "connected": connected, "error": error}
+    except Exception as exc:
+        # Never answer the page with an HTML error page it cannot read.
+        return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
+    return jsonify({"status": status, **payload} if status else payload)
+
+
+@app.get("/api/topics")
+@login_required
+def api_topics():
+    return topics_response()
+
+
+@app.post("/api/topics")
+@login_required
+def add_topic():
+    data = request.get_json(silent=True) or {}
+    try:
+        connector.add_topic(data.get("topic"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
+    return topics_response("ok")
+
+
+@app.delete("/api/topics")
+@login_required
+def remove_topic():
+    data = request.get_json(silent=True) or {}
+    try:
+        connector.remove_topic(data.get("topic"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
+    return topics_response("ok")
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "9000")))
